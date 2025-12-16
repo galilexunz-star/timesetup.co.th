@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>แดชบอร์ดสรุปเวลาทำงาน (Modern White)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+
+    <!-- SweetAlert & Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+            --purple-color: #6f42c1;
+            --late-color: #fd7e14;
+            --checked-in-color: #20c997;
+
+            --light-color: #f5f7fb;
+            --white-color: #ffffff;
+            --dark-color: #222b45;
+            --secondary-text-color: #6c757d;
+            --border-color: #e0e6ed;
+
+            --border-radius: 14px;
+            --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+            --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.12);
+        }
+
+        * { box-sizing: border-box; }
+        .container {
+            max-width: 1700px;
+            margin: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        h1, h2, h3 { margin: 0; font-weight: 700; }
+
+        .card {
+            background: var(--white-color);
+            border-radius: var(--border-radius);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+        }
+        .card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(148, 163, 184, 0.6);
+            box-shadow: var(--shadow-md);
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 8px; }
+            .card { padding: 16px; }
+        }
+
+        /* ---------- Header & Filters ---------- */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .page-header-left {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .page-header h1 {
+            font-size: 2.1rem;
+            letter-spacing: 0.02em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .page-header h1 i {
+            color: var(--primary-color);
+            background: rgba(0, 123, 255, 0.12);
+            padding: 10px;
+            border-radius: 12px;
+        }
+        .page-header-subtitle {
+            font-size: 0.95rem;
+            color: var(--secondary-text-color);
+        }
+
+        .filters-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: 10px 14px;
+            background-color: var(--white-color);
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+        }
+        .filters-container label {
+            color: var(--secondary-text-color);
+            font-size: 1rem;
+        }
+        .filters-container input[type="date"],
+        .filters-container select {
+            padding: 9px 13px;
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            font-size: 0.95rem;
+            font-family: 'Sarabun', sans-serif;
+            background-color: #f9fafb;
+            color: var(--dark-color);
+            transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+            outline: none;
+        }
+        .filters-container input[type="date"]:focus,
+        .filters-container select:focus {
+            border-color: var(--primary-color);
+            background-color: #ffffff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
+        }
+
+        .btn {
+            padding: 9px 18px;
+            border: none;
+            border-radius: 999px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.18s ease-in-out;
+            color: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #007bff, #0056d6);
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.28);
+            font-family: 'Sarabun', sans-serif;
+            white-space: nowrap;
+        }
+        .btn i { font-size: 0.9rem; }
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(37, 99, 235, 0.32);
+            opacity: 0.95;
+        }
+        .btn:active {
+            transform: translateY(0);
+            box-shadow: var(--shadow-sm);
+        }
+        .btn.btn-secondary {
+            background: #64748b;
+            box-shadow: 0 6px 16px rgba(100, 116, 139, 0.25);
+        }
+        .btn.btn-print {
+            background: linear-gradient(135deg, #0ea5e9, #0284c7);
+            box-shadow: 0 6px 16px rgba(14, 165, 233, 0.28);
+        }
+        .btn.btn-success {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            box-shadow: 0 6px 16px rgba(22, 163, 74, 0.28);
+        }
+        .btn.btn-danger {
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            box-shadow: 0 6px 16px rgba(248, 113, 113, 0.28);
+        }
+
+        /* ---------- Summary Cards ---------- */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 18px;
+        }
+        .summary-card {
+            position: relative;
+            padding: 18px 18px 16px 18px;
+            border-radius: 18px;
+            color: #ffffff;
+            border: none;
+            overflow: hidden;
+            isolation: isolate;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .summary-card::after {
+            content: '';
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.25), transparent 70%);
+            top: -40px;
+            right: -30px;
+            z-index: 1;
+        }
+        .summary-card .card-content { position: relative; z-index: 2; }
+        .summary-card .card-content h3 { font-size: 2.2rem; margin-bottom: 2px; }
+        .summary-card .card-content p { margin: 0; font-size: 0.98rem; opacity: 0.9; }
+        .summary-card .card-sub { font-size: 0.78rem; opacity: 0.8; }
+
+        .summary-card .icon-wrapper {
+            position: absolute;
+            right: 14px;
+            bottom: 8px;
+            z-index: 0;
+        }
+        .summary-card .icon-wrapper i {
+            font-size: 3.6rem;
+            color: rgba(255, 255, 255, 0.25);
+            transition: transform 0.3s ease;
+        }
+        .summary-card:hover .icon-wrapper i {
+            transform: translateY(-4px) rotate(-6deg);
+        }
+
+        .summary-card.total      { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); }
+        .summary-card.checked-in { background: linear-gradient(135deg, var(--checked-in-color) 0%, #0ea5e9 100%); }
+        .summary-card.late       { background: linear-gradient(135deg, var(--late-color) 0%, var(--warning-color) 100%); }
+        .summary-card.present    { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
+        .summary-card.leave      { background: linear-gradient(135deg, #facc15 0%, #eab308 100%); color: #1f2933; }
+        .summary-card.absent     { background: linear-gradient(135deg, #f97373 0%, #b91c1c 100%); }
+        .summary-card.onsite     { background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%); }
+        .summary-card.offsite    { background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); }
+
+        /* ---------- Layout ---------- */
+        .dashboard-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.9fr) minmax(320px, 0.9fr);
+            gap: 24px;
+            align-items: flex-start;
+        }
+        .main-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .sidebar-panel .card { position: sticky; top: 18px; }
+
+        .section-header {
+            font-size: 1.3rem;
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .section-header-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-header-title i {
+            padding: 8px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #2563eb;
+        }
+
+        .section-header .fa-list-check { color: var(--success-color); background: #ecfdf3; }
+        .section-header .fa-user-slash { color: var(--danger-color); background: #fef2f2; }
+        .section-header .fa-chart-pie  { color: var(--primary-color); background: #eff6ff; }
+        .section-header .fa-history    { color: var(--info-color); background: #e0f2fe; }
+        .section-header .fa-users-cog  { color: #6366f1; background: #eef2ff; }
+
+        /* ---------- NEW: Dual list layout ---------- */
+        .dual-list-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+            gap: 18px;
+        }
+        .dual-list-card {
+            border-radius: 16px;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            background: #ffffff;
+            padding: 18px 18px 14px 18px;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .dual-list-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .dual-list-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dual-list-title i {
+            padding: 6px;
+            border-radius: 999px;
+            font-size: 0.9rem;
+        }
+        .dual-list-title-main {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .dual-list-title-sub {
+            font-size: 0.8rem;
+            color: var(--secondary-text-color);
+        }
+        .dual-list-badge {
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .dual-list-card--checked-in .dual-list-title i {
+            background: #ecfdf3;
+            color: #16a34a;
+        }
+        .dual-list-card--missing .dual-list-title i {
+            background: #fef2f2;
+            color: #ef4444;
+        }
+
+        .dual-list-filter {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: var(--secondary-text-color);
+        }
+        .dual-list-filter select {
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+            font-size: 0.85rem;
+            background: #f9fafb;
+            font-family: 'Sarabun', sans-serif;
+        }
+        .dual-list-filter label {
+            font-size: 0.85rem;
+        }
+
+        /* ---------- Tables & Badges ---------- */
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+        }
+        .modern-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .modern-table th,
+        .modern-table td {
+            padding: 12px 14px;
+            text-align: left;
+            border-bottom: 1px solid #edf0f5;
+            white-space: nowrap;
+            font-size: 0.94rem;
+        }
+        .modern-table thead th {
+            background-color: #f9fafb;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            font-size: 0.78rem;
+            letter-spacing: 0.03em;
+        }
+        .modern-table tbody tr:hover { background-color: #f3f4f6; }
+
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            color: #ffffff;
+            font-weight: 600;
+        }
+        .status-normal      { background-color: var(--success-color); }
+        .status-late        { background-color: var(--late-color); }
+        .status-logged-out  { background-color: var(--success-color); }
+        .status-not-logged-out {
+            background-color: var(--warning-color);
+            color: #1f2937;
+        }
+        .status-not-logged-in {
+            background-color: var(--danger-color);
+        }
+.btn.btn-info {
+    background: linear-gradient(135deg, #0ea5e9, #0369a1);
+    box-shadow: 0 6px 16px rgba(14, 165, 233, 0.28);
+}
+        /* ---------- Chart ---------- */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            min-height: 280px;
+        }
+        .chart-container canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* ---------- No Data ---------- */
+        .no-data {
+            text-align: center;
+            padding: 16px;
+            color: var(--secondary-text-color);
+            font-size: 0.98rem;
+        }
+        .no-data.positive {
+            color: var(--success-color);
+            font-weight: 600;
+        }
+
+        /* ---------- Image Modal ---------- */
+        .image-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            padding-top: 60px;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            overflow: auto;
+            background-color: rgba(15, 23, 42, 0.90);
+        }
+        .image-modal-content {
+            margin: auto;
+            display: block;
+            max-width: 90%;
+            max-height: 80vh;
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(15, 23, 42, 0.7);
+        }
+        .image-modal-close {
+            position: absolute;
+            top: 15px;
+            right: 25px;
+            color: #fff;
+            font-size: 32px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* ---------- CUSTOM MODALS (บุคคล / พนักงาน) ---------- */
+        .custom-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 900;
+            padding: 12px;
+        }
+        .custom-modal-overlay.show { display: flex; }
+        .custom-modal-card {
+            max-width: 1100px;
+            width: 100%;
+            max-height: 90vh;
+            overflow: auto;
+            box-shadow: var(--shadow-md);
+            border-radius: 20px;
+            background: var(--white-color);
+        }
+
+        /* ---------- Print Styles ---------- */
+        .print-only { display: none; }
+
+        @media print {
+            body {
+                background: none;
+                color: #000;
+                padding: 0;
+                margin: 0;
+            }
+
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+
+            #print-header h1 {
+                font-size: 20pt;
+                margin-bottom: 4px;
+            }
+            #print-header p {
+                font-size: 12pt;
+                margin: 2px 0;
+            }
+
+            .print-area table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 11pt;
+            }
+            .print-area th,
+            .print-area td {
+                border: 1px solid #333;
+                padding: 6px 8px;
+                text-align: left;
+            }
+            .print-area .status-badge {
+                background: none !important;
+                color: #000 !important;
+                border: none !important;
+                font-weight: normal;
+            }
+
+            body.printing-individual .summary-grid,
+            body.printing-individual .dashboard-layout,
+            body.printing-individual .page-header,
+            body.printing-individual #employee-modal,
+            body.printing-individual #individual-modal {
+                display: none !important;
+            }
+        }
+
+        /* ---------- Responsive ---------- */
+        @media screen and (max-width: 1024px) {
+            .dashboard-layout {
+                grid-template-columns: 1fr;
+            }
+            .sidebar-panel .card { position: static; }
+        }
+
+        @media screen and (max-width: 768px) {
+            .modern-table {
+                border: 0;
+            }
+            .modern-table thead {
+                border: 0;
+                clip: rect(0 0 0 0);
+                height: 1px;
+                margin: -1px;
+                overflow: hidden;
+                padding: 0;
+                position: absolute;
+                width: 1px;
+            }
+            .modern-table tr {
+                display: block;
+                border: 1px solid var(--border-color);
+                border-radius: var(--border-radius);
+                margin-bottom: 12px;
+                box-shadow: var(--shadow-sm);
+                background-color: #ffffff;
+            }
+            .modern-table td {
+                display: block;
+                text-align: right;
+                font-size: 0.95em;
+                border-bottom: 1px dotted var(--border-color);
+                padding: 10px 14px;
+                position: relative;
+                white-space: normal;
+            }
+            .modern-table td:last-child { border-bottom: 0; }
+            .modern-table td::before {
+                content: attr(data-label);
+                float: left;
+                font-weight: 600;
+                color: var(--secondary-text-color);
+                text-align: left;
+            }
+            .modern-table td img {
+                display: block;
+                margin-left: auto;
+            }
+
+            .chart-container { min-height: 260px; }
+            .filters-container {
+                border-radius: 16px;
+                width: 100%;
+                justify-content: center;
+            }
+            .dual-list-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- ========== HEADER ========== -->
+    <header class="page-header no-print">
+        <div class="page-header-left">
+            <h1><i class="fas fa-tachometer-alt"></i> แดชบอร์ดรายวัน</h1>
+            <div class="page-header-subtitle">
+                สรุปสถานะการลงเวลาทำงานแบบเรียลไทม์ และค้นหาข้อมูลรายบุคคล
+            </div>
+        </div>
+        <div class="filters-container">
+            <label for="summaryDate" title="เลือกวันที่สรุป"><i class="fas fa-calendar-alt"></i></label>
+            <input type="date" id="summaryDate">
+
+            <button class="btn" type="button" onclick="loadDailySummary()">
+                <i class="fas fa-sync-alt"></i> โหลดข้อมูล
+            </button>
+
+            <button class="btn btn-print" type="button" onclick="printDailyReport()">
+                <i class="fas fa-print"></i> พิมพ์รายวัน
+            </button>
+
+            <button class="btn btn-secondary" type="button" onclick="openIndividualModal()">
+                <i class="fas fa-user-search"></i> ค้นหาบุคคล
+            </button>
+            <button class="btn btn-success" type="button" onclick="openEmployeeModal()">
+                <i class="fas fa-users-cog"></i> จัดการพนักงาน
+            </button>
+            <button class="btn btn-info" type="button" onclick="openRadiusModal()">
+    <i class="fas fa-map-marker-alt"></i> จัดการรัศมี 
+            </button>
+        </div>
+    </header>
+
+    <!-- ========== SUMMARY CARDS ========== -->
+    <section class="summary-grid no-print">
+        <div class="summary-card total">
+            <div class="card-content">
+                <div class="card-sub">ทั้งหมด</div>
+                <h3 id="totalEmployees">0</h3>
+                <p>จำนวนพนักงาน</p>
+            </div>
+            <div class="icon-wrapper"><i class="fas fa-users"></i></div>
+        </div>
+        <div class="summary-card checked-in">
+            <div class="card-content">
+                <div class="card-sub">วันนี้</div>
+                <h3 id="totalCheckedIn">0</h3>
+                <p>เข้างานแล้ว</p>
+            </div>
+            <div class="icon-wrapper"><i class="fas fa-sign-in-alt"></i></div>
+        </div>
+        <div class="summary-card late">
+            <div class="card-content">
+                <div class="card-sub">หลังเวลา 08:15 น.</div>
+                <h3 id="totalLate">0</h3>
+                <p>มาสาย</p>
+            </div>
+            <div class="icon-wrapper"><i class="fas fa-exclamation-triangle"></i></div>
+        </div>
+        <div class="summary-card present">
+            <div class="card-content">
+                <div class="card-sub">ลงเวลาเข้า-ออกครบ</div>
+                <h3 id="totalLoggedOut">0</h3>
+                <p>ลงเวลาครบ</p>
+            </div>
+            <div class="icon-wrapper"><i class="fas fa-user-check"></i></div>
+        </div>
+        <div class="summary-card leave">
+            <div class="card-content">
+                <div class="card-sub">ลงเวลาเข้าแล้ว</div>
+                <h3 id="totalNotLoggedOut">0</h3>
+                <p>ยังไม่ออกงาน</p>
+            </div>
+            <div class="icon-wrapper"><i class="fas fa-user-clock"></i></div>
+        </div>
+        <div class="summary-card absent">
+            <div class="card-content">
+                <div class="card-sub">ไม่มีข้อมูลเข้างาน</div>
+                <h3 id="totalMissingToday">0</h3>
+                <p>ขาด / ไม่ลงเวลา</p>
+            </div>
+            <div class="icon-wrapper"><i class="fas fa-user-times"></i></div>
+        </div>
+        <div class="summary-card onsite">
+            <div class="card-content">
+                <div class="card-sub">ตำแหน่งการทำงาน</div>
+                <h3 id="totalOnSite">0</h3>
+                <p>ทำงานในหน่วยบริการ</p>
+            </div>
+            <div class="icon-wrapper"><i class="fas fa-building"></i></div>
+        </div>
+        <div class="summary-card offsite">
+            <div class="card-content">
+                <div class="card-sub">ตำแหน่งการทำงาน</div>
+                <h3 id="totalOffSite">0</h3>
+                <p>ทำงานนอกหน่วยบริการ</p>
+            </div>
+            <div class="icon-wrapper"><i class="fas fa-map-marker-alt"></i></div>
+        </div>
+    </section>
+
+    <!-- ========== MAIN DASHBOARD ========== -->
+    <div class="dashboard-layout no-print">
+        <!-- LEFT: dual list card (ลงเวลา / ไม่ลงเวลา) -->
+        <main class="main-panel">
+            <section id="daily-report-section">
+                <div class="dual-list-grid">
+
+                    <!-- รายละเอียดผู้ที่ลงเวลาปฏิบัติงาน -->
+                    <div class="dual-list-card dual-list-card--checked-in">
+                        <div class="dual-list-card-header">
+                            <div class="dual-list-title">
+                                <i class="fas fa-list-check"></i>
+                                <div>
+                                    <div class="dual-list-title-main">รายละเอียดผู้ที่ลงเวลาปฏิบัติงาน</div>
+                                    <div class="dual-list-title-sub">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="dual-list-filter">
+                                <label for="workTypeFilter">ประเภทงาน:</label>
+                                <select id="workTypeFilter" onchange="filterAndRenderTable()">
+                                    <option value="all">ทั้งหมด</option>
+                                    <option value="ปฎิบัติงานในหน่วยบริการ">ทำงานในหน่วยบริการ</option>
+                                    <option value="ปฎิบัติงานนอกหน่วยบริการ">ทำงานนอกหน่วยบริการ</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="modern-table">
+                                <thead>
+                                <tr>
+                                    <th>ชื่อ-สกุล</th>
+                                    <th>เวลาเข้า</th>
+                                    <th>สถานะเข้างาน</th>
+                                    <th>รูปเข้า</th>
+                                    <th>เวลาออก</th>
+                                    <th>รูปออก</th>
+                                    <th>ประเภทงาน</th>
+                                    <th>สถานที่</th>
+                                    <th>สถานะ</th>
+                                </tr>
+                                </thead>
+                                <tbody id="dailyAttendanceDetails"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- รายชื่อผู้ที่ไม่ได้ลงเวลา -->
+                    <div class="dual-list-card dual-list-card--missing">
+                        <div class="dual-list-card-header">
+                            <div class="dual-list-title">
+                                <i class="fas fa-user-slash"></i>
+                                <div>
+                                    <div class="dual-list-title-main">รายชื่อผู้ที่ไม่ได้ลงเวลา</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="modern-table">
+                                <thead>
+                                <tr>
+                                    <th>ชื่อ-สกุล</th>
+                                    <th>สถานะ</th>
+                                </tr>
+                                </thead>
+                                <tbody id="missingAttendanceDetails"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+        </main>
+
+        <!-- RIGHT: Chart -->
+        <aside class="sidebar-panel">
+            <section class="card">
+                <h2 class="section-header">
+                    <div class="section-header-title">
+                        <i class="fas fa-chart-pie"></i>
+                        ภาพรวมสถานะวันนี้
+                    </div>
+                </h2>
+                <div class="chart-container">
+                    <canvas id="attendanceStatusChart"></canvas>
+                </div>
+            </section>
+        </aside>
+    </div>
+</div>
+
+<!-- ========== MODAL: ค้นหาข้อมูลรายบุคคล ========== -->
+<div id="individual-modal" class="custom-modal-overlay no-print" onclick="closeIndividualModal(event)">
+    <section class="card custom-modal-card" onclick="event.stopPropagation()">
+        <h1 style="text-align:center;margin-bottom:18px;font-size:1.6rem;">
+            <i class="fas fa-user-search" style="color:var(--primary-color);margin-right:6px;"></i>
+            ค้นหาข้อมูลรายบุคคล
+        </h1>
+
+        <div class="filters-container" style="justify-content:center;border-radius:16px;margin-bottom:10px;">
+            <label for="employeeSelect"><i class="fas fa-user"></i></label>
+            <select id="employeeSelect">
+                <option value="">-- กรุณาเลือกพนักงาน --</option>
+            </select>
+
+            <label for="startDate"><i class="fas fa-calendar-alt"></i></label>
+            <input type="date" id="startDate">
+
+            <label for="endDate"><i class="fas fa-calendar-alt"></i></label>
+            <input type="date" id="endDate">
+
+            <button class="btn" type="button" onclick="loadIndividualData()">
+                <i class="fas fa-search"></i> ค้นหา
+            </button>
+        </div>
+
+        <div id="individualResultsHeaderContainer"
+             style="display:none;margin-top:18px;align-items:center;justify-content:space-between;gap:10px;">
+            <h2 id="individualResultsHeader" style="margin:0;font-size:1.3rem;">
+                <i class="fas fa-history"></i> ผลการค้นหา
+            </h2>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn btn-print" type="button" onclick="printIndividualReport()">
+                    <i class="fas fa-print"></i> พิมพ์ผลการค้นหา
+                </button>
+                <button class="btn btn-secondary" type="button" onclick="closeIndividualModal()">
+                    <i class="fas fa-times"></i> ปิด
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive" style="margin-top:16px;">
+            <table class="modern-table">
+                <thead>
+                <tr>
+                    <th>วันที่</th>
+                    <th>เวลาเข้า</th>
+                    <th>สถานะเข้างาน</th>
+                    <th>เวลาออก</th>
+                    <th>ประเภทงาน</th>
+                    <th>สถานที่</th>
+                    <th>สถานะ</th>
+                </tr>
+                </thead>
+                <tbody id="individualResults">
+                <tr>
+                    <td colspan="7" class="no-data">
+                        กรุณาเลือกพนักงานและช่วงวันที่เพื่อค้นหาข้อมูล
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<!-- ========== MODAL: จัดการรายชื่อพนักงาน ========== -->
+<div id="employee-modal" class="custom-modal-overlay no-print" onclick="closeEmployeeModal(event)">
+    <section class="card custom-modal-card" onclick="event.stopPropagation()">
+        <h2 class="section-header">
+            <div class="section-header-title">
+                <i class="fas fa-users-cog"></i>
+                จัดการรายชื่อพนักงาน
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn btn-success" type="button" onclick="addEmployee()">
+                    <i class="fas fa-user-plus"></i> เพิ่มพนักงาน
+                </button>
+                <button class="btn btn-secondary" type="button" onclick="closeEmployeeModal()">
+                    <i class="fas fa-times"></i> ปิด
+                </button>
+            </div>
+        </h2>
+
+        <div class="table-responsive">
+            <table class="modern-table">
+                <thead>
+                <tr>
+                    <th>ชื่อ-สกุล</th>
+                    <th style="text-align:right;">จัดการ</th>
+                </tr>
+                </thead>
+                <tbody id="employeeManagementList">
+                <tr>
+                    <td colspan="2" class="no-data">กำลังโหลดรายชื่อ...</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+<!-- ========== MODAL: จัดการรัศมี (เมตร) ========== -->
+<div id="radius-modal" class="custom-modal-overlay no-print" onclick="closeRadiusModal(event)">
+    <section class="card custom-modal-card" onclick="event.stopPropagation()">
+        <h2 class="section-header">
+            <div class="section-header-title">
+                <i class="fas fa-map-marker-alt"></i>
+                จัดการพิกัดศูนย์และรัศมี (เมตร)
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn btn-success" type="button" onclick="saveRadiusConfig()">
+                    <i class="fas fa-save"></i> บันทึก
+                </button>
+                <button class="btn btn-danger" type="button" onclick="clearRadiusConfig()">
+                    <i class="fas fa-trash-alt"></i> ล้างค่า
+                </button>
+                <button class="btn btn-secondary" type="button" onclick="closeRadiusModal()">
+                    <i class="fas fa-times"></i> ปิด
+                </button>
+            </div>
+        </h2>
+
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <div>
+                <label for="radiusCoords" style="font-weight:600;">พิกัดศูนย์ (ละติจูด,ลองจิจูด)</label>
+                <input id="radiusCoords" type="text"
+                       placeholder="เช่น 18.937461,99.212059"
+                       style="width:100%;margin-top:6px;padding:10px 12px;border-radius:10px;border:1px solid #e0e6ed;font-family:'Sarabun',sans-serif;">
+                <small style="color:#6b7280;">
+                    รูปแบบ: ละติจูด,ลองจิจูด (คั่นด้วยเครื่องหมายจุลภาค)
+                </small>
+            </div>
+
+            <div>
+                <label for="radiusValue" style="font-weight:600;">รัศมีที่สามารถลงเวลาได้ (เมตร)</label>
+                <input id="radiusValue" type="number" min="1" step="1"
+                       placeholder="เช่น 1000"
+                       style="width:100%;margin-top:6px;padding:10px 12px;border-radius:10px;border:1px solid #e0e6ed;font-family:'Sarabun',sans-serif;">
+                <small style="color:#6b7280;">
+                    หน่วยเป็น <b>เมตร</b> เช่น 1000 = 1 กิโลเมตร
+                </small>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- พื้นที่ใช้ตอนพิมพ์ -->
+<div id="print-header" class="print-only"></div>
+<div id="daily-print-section" class="print-only print-area"></div>
+<div id="individual-print-section" class="print-only print-area"></div>
+
+<!-- Modal แสดงรูปภาพเข้างาน/ออกงาน -->
+<div id="imageModal" class="image-modal" onclick="closeImageModal()">
+    <span class="image-modal-close" onclick="closeImageModal()">×</span>
+    <img class="image-modal-content" id="modalImage">
+</div>
+
+<script>
+    const LATE_THRESHOLD = '08:30';
+    let globalDailyData = null;
+    let attendanceChart = null;
+
+    function sortTableByTime(table, timeColIndex) {
+        if (!table || !table.tBodies || !table.tBodies[0]) return;
+        const tbody = table.tBodies[0];
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+
+        const getTimeValue = (row) => {
+            const cell = row.cells[timeColIndex];
+            if (!cell) return Number.MAX_SAFE_INTEGER;
+
+            const text = (cell.textContent || '').trim();
+            if (!text || text === '-' || text.includes('ไม่พบข้อมูล')) {
+                return Number.MAX_SAFE_INTEGER;
+            }
+            const parts = text.split(':').map(Number);
+            if (parts.length >= 2 && !parts.some(isNaN)) {
+                return parts[0] * 60 + parts[1];
+            }
+            return Number.MAX_SAFE_INTEGER;
+        };
+
+        rows.sort((a, b) => getTimeValue(a) - getTimeValue(b));
+        rows.forEach(row => tbody.appendChild(row));
+    }
+
+    function showLoading(message = 'กำลังโหลดข้อมูล...') {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: message,
+                allowOutsideClick: false,
+                background: '#fff',
+                color: '#333',
+                didOpen: () => Swal.showLoading()
+            });
+        }
+    }
+
+    function setInitialDates() {
+        const today = new Date().toLocaleDateString('en-CA');
+        document.getElementById('summaryDate').value = today;
+        document.getElementById('startDate').value = today;
+        document.getElementById('endDate').value = today;
+    }
+
+    async function printDailyReport() {
+        const date = document.getElementById('summaryDate').value || new Date().toISOString().slice(0, 10);
+        const formattedDate = new Date(date).toLocaleDateString('th-TH', {
+            year: 'numeric', month: 'long', day: 'numeric'
+        });
+
+        const tables = document.querySelectorAll('#daily-report-section .table-responsive table');
+        if (!tables.length) {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire('พิมพ์ไม่ได้', 'ไม่พบตารางข้อมูล', 'error');
+            } else {
+                alert('ไม่พบตารางข้อมูล');
+            }
+            return;
+        }
+
+        const t1 = tables[0].cloneNode(true);
+        const t2 = tables[1] ? tables[1].cloneNode(true) : null;
+
+        const prepareTableForPrint = (tbl) => {
+            tbl.style.width = '100%';
+            tbl.style.borderCollapse = 'collapse';
+            tbl.querySelectorAll('th,td').forEach(td => {
+                td.style.border = '1px solid #000';
+                td.style.padding = '6px';
+                td.style.verticalAlign = 'top';
+                td.style.whiteSpace = 'normal';
+                td.style.color = '#000';
+            });
+            tbl.querySelectorAll('.status-badge').forEach(badge => {
+                badge.replaceWith(document.createTextNode(badge.textContent.trim()));
+            });
+            tbl.querySelectorAll('img').forEach(img => {
+                img.style.maxHeight = '70px';
+                img.style.borderRadius = '4px';
+            });
+        };
+
+        prepareTableForPrint(t1);
+        if (t2) prepareTableForPrint(t2);
+
+        sortTableByTime(t1, 1);
+
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        document.body.appendChild(iframe);
+
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        doc.open();
+        doc.write(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>รายงานการลงเวลาประจำวัน</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4 portrait; margin: 15mm; }
+  body { font-family: 'Sarabun', sans-serif; color:#000; }
+  h2 { font-size: 20pt; margin: 0 0 4mm 0; }
+  p  { font-size: 12pt; margin: 0 0 8mm 0; }
+  h3 { font-size: 14pt; margin: 10mm 0 4mm 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 11pt; }
+  th, td { border: 1px solid #000; padding: 6px; vertical-align: top; }
+  img { max-height: 60px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h2>รายงานการลงเวลาประจำวัน</h2>
+  <p>ข้อมูล ณ วันที่ ${formattedDate}</p>
+  <h3>รายละเอียดผู้ที่ลงเวลาปฏิบัติงาน</h3>
+</body>
+</html>`);
+        doc.close();
+
+        doc.body.appendChild(t1);
+
+        if (t2) {
+            const h3 = doc.createElement('h3');
+            h3.textContent = 'รายชื่อผู้ที่ไม่ได้ลงเวลา';
+            doc.body.appendChild(h3);
+            doc.body.appendChild(t2);
+        }
+
+        const imgs = Array.from(doc.images);
+        await Promise.all(
+            imgs.map(img => img.complete
+                ? Promise.resolve()
+                : new Promise(res => { img.onload = img.onerror = res; })
+            )
+        );
+
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        setTimeout(() => document.body.removeChild(iframe), 1500);
+    }
+
+    function printIndividualReport() {
+        const selectElement = document.getElementById('employeeSelect');
+        const employee = selectElement.options[selectElement.selectedIndex]?.text || '';
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
+
+        if (!employee || !start || !end) {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกชื่อพนักงานและช่วงวันที่ให้ครบถ้วน', 'warning');
+            }
+            return;
+        }
+
+        const startDate = new Date(start).toLocaleDateString('th-TH', {
+            day: 'numeric', month: 'short', year: 'numeric'
+        });
+        const endDate = new Date(end).toLocaleDateString('th-TH', {
+            day: 'numeric', month: 'short', year: 'numeric'
+        });
+
+        document.getElementById('print-header').innerHTML =
+            `<h1>รายงานการลงเวลารายบุคคล</h1>
+             <p>คุณ: ${employee}</p>
+             <p>ระหว่างวันที่ ${startDate} ถึง ${endDate}</p>`;
+
+        const tableWrapper = document.querySelector('#individualResults').parentElement.cloneNode(true);
+        const printSection = document.getElementById('individual-print-section');
+        printSection.innerHTML = '';
+        printSection.appendChild(tableWrapper);
+
+        document.body.classList.add('printing-individual');
+        window.print();
+        document.body.classList.remove('printing-individual');
+    }
+
+    function populateEmployeeDropdown() {
+        showLoading('กำลังโหลดรายชื่อพนักงาน...');
+        google.script.run
+            .withSuccessHandler(names => {
+                if (typeof Swal !== 'undefined') Swal.close();
+
+                const select = document.getElementById('employeeSelect');
+                select.innerHTML = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
+
+                if (names && names.length > 0) {
+                    names.forEach(name => {
+                        const opt = document.createElement('option');
+                        opt.value = name;
+                        opt.textContent = name;
+                        select.appendChild(opt);
+                    });
+                }
+
+                renderEmployeeManagementList(names);
+                loadDailySummary();
+            })
+            .withFailureHandler(error => {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire('เกิดข้อผิดพลาด', `ไม่สามารถโหลดรายชื่อพนักงานได้: ${error.message}`, 'error');
+                } else {
+                    alert('ไม่สามารถโหลดรายชื่อพนักงานได้');
+                }
+                renderEmployeeManagementList([]);
+            })
+            .getEmployeeNames();
+    }
+
+    function renderEmployeeManagementList(names) {
+        const listBody = document.getElementById('employeeManagementList');
+        if (!names || names.length === 0) {
+            listBody.innerHTML = '<tr><td colspan="2" class="no-data">ยังไม่มีข้อมูลพนักงาน</td></tr>';
+            return;
+        }
+
+        listBody.innerHTML = names.map(name => `
+            <tr>
+                <td data-label="ชื่อ-สกุล">${name}</td>
+                <td data-label="จัดการ" style="text-align:right;">
+                    <button class="btn btn-danger" type="button" onclick="deleteEmployee('${name}')">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function addEmployee() {
+        if (typeof Swal === 'undefined') {
+            alert('ไม่สามารถเพิ่มพนักงานได้ (SweetAlert ไม่พร้อมใช้งาน)');
+            return;
+        }
+
+        const { value: newName } = await Swal.fire({
+            title: 'เพิ่มพนักงานใหม่',
+            input: 'text',
+            inputLabel: 'ชื่อ-สกุล',
+            inputPlaceholder: 'กรอกชื่อ-สกุลของพนักงาน',
+            showCancelButton: true,
+            confirmButtonText: 'เพิ่ม',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#22c55e',
+            inputValidator: (value) => !value && 'กรุณากรอกชื่อพนักงาน!'
+        });
+
+        if (newName) {
+            showLoading(`กำลังเพิ่มคุณ ${newName}...`);
+            google.script.run
+                .withSuccessHandler(response => {
+                    Swal.fire('สำเร็จ!', response.message, 'success');
+                    populateEmployeeDropdown();
+                })
+                .withFailureHandler(error => Swal.fire('เกิดข้อผิดพลาด', error.message, 'error'))
+                .addEmployee(newName);
+        }
+    }
+
+    function deleteEmployee(name) {
+        if (typeof Swal === 'undefined') {
+            if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ ${name}?`)) {
+                google.script.run.deleteEmployee(name);
+                populateEmployeeDropdown();
+            }
+            return;
+        }
+
+        Swal.fire({
+            title: 'ยืนยันการลบ',
+            html: `คุณแน่ใจหรือไม่ว่าต้องการลบ <b>${name}</b>?<br>การกระทำนี้ไม่สามารถย้อนกลับได้`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'ใช่, ลบเลย!',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#ef4444',
+        }).then((result) => {
+            if (result.isConfirmed) {
+                showLoading(`กำลังลบคุณ ${name}...`);
+                google.script.run
+                    .withSuccessHandler(response => {
+                        Swal.fire('สำเร็จ!', response.message, 'success');
+                        populateEmployeeDropdown();
+                    })
+                    .withFailureHandler(error => Swal.fire('เกิดข้อผิดพลาด', error.message, 'error'))
+                    .deleteEmployee(name);
+            }
+        });
+    }
+
+    function loadDailySummary() {
+        const selectedDate = document.getElementById('summaryDate').value;
+        if (!selectedDate) {
+            if (typeof Swal !== 'undefined') Swal.fire('ข้อผิดพลาด', 'กรุณาเลือกวันที่', 'error');
+            return;
+        }
+
+        showLoading('กำลังโหลดข้อมูลรายวัน...');
+        google.script.run
+            .withSuccessHandler(response => {
+                globalDailyData = response;
+                document.getElementById('workTypeFilter').value = 'all';
+                renderDailyDashboard(globalDailyData);
+                if (typeof Swal !== 'undefined') Swal.close();
+            })
+            .withFailureHandler(error => {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire('เกิดข้อผิดพลาด', `ไม่สามารถโหลดข้อมูลรายวันได้: ${error.message}`, 'error');
+                } else {
+                    alert('ไม่สามารถโหลดข้อมูลรายวันได้');
+                }
+            })
+            .getAttendanceSummaryDaily(selectedDate);
+    }
+
+    function filterAndRenderTable() {
+        if (globalDailyData) {
+            renderDailyDashboard(globalDailyData);
+        }
+    }
+
+    function renderDailyDashboard({ summary, details }) {
+        document.getElementById('totalEmployees').textContent = summary.totalEmployees || 0;
+        document.getElementById('totalLoggedOut').textContent = summary.loggedOut || 0;
+        document.getElementById('totalNotLoggedOut').textContent = summary.notLoggedOut || 0;
+        document.getElementById('totalMissingToday').textContent = summary.missing || 0;
+
+        let loggedInUsers = details
+            .filter(emp => emp.status !== 'ไม่ได้ลงเวลา')
+            .sort((a, b) => a.name.localeCompare(b.name, 'th'));
+
+        const missingUsers = details
+            .filter(emp => emp.status === 'ไม่ได้ลงเวลา')
+            .sort((a, b) => a.name.localeCompare(b.name, 'th'));
+
+        let onSiteCount = 0;
+        let offSiteCount = 0;
+        let lateCount = 0;
+
+        loggedInUsers.forEach(emp => {
+            if (emp.locationType === 'ปฎิบัติงานในหน่วยบริการ') onSiteCount++;
+            else if (emp.locationType === 'ปฎิบัติงานหน่วยบริการ') offSiteCount++;
+            if (emp.timeIn && emp.timeIn > LATE_THRESHOLD) lateCount++;
+        });
+
+        document.getElementById('totalCheckedIn').textContent = loggedInUsers.length;
+        document.getElementById('totalLate').textContent = lateCount;
+        document.getElementById('totalOnSite').textContent = onSiteCount;
+        document.getElementById('totalOffSite').textContent = offSiteCount;
+
+        const filterValue = document.getElementById('workTypeFilter').value;
+        if (filterValue !== 'all') {
+            loggedInUsers = loggedInUsers.filter(emp => emp.locationType === filterValue);
+        }
+
+        const loggedInTableBody = document.getElementById('dailyAttendanceDetails');
+        loggedInTableBody.innerHTML = loggedInUsers.length === 0
+            ? '<tr><td colspan="9" class="no-data">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td></tr>'
+            : loggedInUsers.map(entry => {
+                const isLate = entry.timeIn && entry.timeIn > LATE_THRESHOLD;
+                const checkInStatusText = entry.timeIn ? (isLate ? 'สาย' : 'ปกติ') : '-';
+                const checkInStatusBadge = entry.timeIn
+                    ? `<span class="status-badge ${isLate ? 'status-late' : 'status-normal'}">${checkInStatusText}</span>`
+                    : '-';
+
+                let statusClass = 'status-not-logged-in';
+                if (entry.status === 'ออกงานแล้ว') statusClass = 'status-logged-out';
+                else if (entry.status === 'ยังไม่ออกงาน') statusClass = 'status-not-logged-out';
+
+                return `
+                    <tr>
+                        <td data-label="ชื่อ-สกุล">${entry.name}</td>
+                        <td data-label="เวลาเข้า">${entry.timeIn || '-'}</td>
+                        <td data-label="สถานะเข้างาน">${checkInStatusBadge}</td>
+                        <td data-label="รูปเข้า">
+                            ${entry.imageIn
+                                ? `<img src="${entry.imageIn}" alt="รูปเข้า" style="height:50px;border-radius:8px;cursor:pointer;" onclick="showImageModal('${entry.imageIn}')">`
+                                : '-'}
+                        </td>
+                        <td data-label="เวลาออก">${entry.timeOut || '-'}</td>
+                        <td data-label="รูปออก">
+                            ${entry.imageOut
+                                ? `<img src="${entry.imageOut}" alt="รูปออก" style="height:50px;border-radius:8px;cursor:pointer;" onclick="showImageModal('${entry.imageOut}')">`
+                                : '-'}
+                        </td>
+                        <td data-label="ประเภทงาน">${entry.locationType || 'ไม่ระบุ'}</td>
+                        <td data-label="สถานที่">${entry.location || '-'}</td>
+                        <td data-label="สถานะ">
+                            <span class="status-badge ${statusClass}">${entry.status}</span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+        const missingTableBody = document.getElementById('missingAttendanceDetails');
+        missingTableBody.innerHTML = missingUsers.length === 0
+            ? '<tr><td colspan="2" class="no-data positive"><i class="fas fa-check-circle"></i> ทุกคนลงเวลาเรียบร้อย</td></tr>'
+            : missingUsers.map(entry => `
+                <tr>
+                    <td data-label="ชื่อ-สกุล">${entry.name}</td>
+                    <td data-label="สถานะ"><span class="status-badge status-not-logged-in">${entry.status}</span></td>
+                </tr>
+            `).join('');
+
+        renderChart(summary);
+    }
+
+    function renderChart(summary) {
+        const ctx = document.getElementById('attendanceStatusChart').getContext('2d');
+        if (attendanceChart instanceof Chart) {
+            attendanceChart.destroy();
+        }
+
+        const data = [
+            summary.loggedOut || 0,
+            summary.notLoggedOut || 0,
+            summary.missing || 0
+        ];
+
+        attendanceChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['ลงเวลาครบ', 'ยังไม่ออกงาน', 'ขาด/ไม่ลงเวลา'],
+                datasets: [{
+                    data,
+                    backgroundColor: [
+                        'rgba(34, 197, 94, 0.9)',
+                        'rgba(250, 204, 21, 0.9)',
+                        'rgba(248, 113, 113, 0.9)'
+                    ],
+                    hoverBackgroundColor: [
+                        'rgba(22, 163, 74, 1)',
+                        'rgba(234, 179, 8, 1)',
+                        'rgba(239, 68, 68, 1)'
+                    ],
+                    borderColor: '#ffffff',
+                    borderWidth: 2,
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            font: {
+                                family: "'Sarabun', sans-serif",
+                                size: 13,
+                                weight: '500'
+                            },
+                            color: '#111827',
+                            boxWidth: 16,
+                            padding: 16,
+                            usePointStyle: true,
+                            pointStyle: 'circle'
+                        }
+                    },
+                    tooltip: {
+                        enabled: true,
+                        bodyFont: {
+                            family: "'Sarabun', sans-serif",
+                            size: 13
+                        },
+                        titleFont: {
+                            family: "'Sarabun', sans-serif",
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleColor: '#ffffff',
+                        bodyColor: '#e5e7eb',
+                        borderColor: 'rgba(148, 163, 184, 0.4)',
+                        borderWidth: 1,
+                        cornerRadius: 8,
+                        displayColors: true,
+                        boxPadding: 6
+                    }
+                },
+                animation: {
+                    animateScale: true,
+                    animateRotate: true
+                }
+            }
+        });
+    }
+
+    function loadIndividualData() {
+        const employeeName = document.getElementById('employeeSelect').value;
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+
+        if (!employeeName) {
+            if (typeof Swal !== 'undefined') Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกชื่อพนักงาน', 'warning');
+            return;
+        }
+        if (!startDate || !endDate) {
+            if (typeof Swal !== 'undefined') Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกช่วงวันที่', 'warning');
+            return;
+        }
+
+        showLoading(`กำลังค้นหาข้อมูลของ ${employeeName}...`);
+        google.script.run
+            .withSuccessHandler(results => {
+                renderIndividualResults(results, employeeName);
+                if (typeof Swal !== 'undefined') Swal.close();
+            })
+            .withFailureHandler(error => {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire('เกิดข้อผิดพลาด', `ไม่สามารถค้นหาข้อมูลได้: ${error.message}`, 'error');
+                } else {
+                    alert('ไม่สามารถค้นหาข้อมูลได้');
+                }
+            })
+            .getIndividualAttendanceData(employeeName, startDate, endDate);
+    }
+
+    function renderIndividualResults(results, employeeName) {
+        const resultsTableBody = document.getElementById('individualResults');
+        const resultsHeaderContainer = document.getElementById('individualResultsHeaderContainer');
+        const resultsHeader = document.getElementById('individualResultsHeader');
+
+        resultsHeader.innerHTML = `<i class="fas fa-history"></i> ผลการค้นหา: ${employeeName}`;
+        resultsHeaderContainer.style.display = (results && results.length > 0) ? 'flex' : 'none';
+
+        if (!results || results.length === 0) {
+            resultsTableBody.innerHTML = '<tr><td colspan="7" class="no-data">ไม่พบข้อมูลในช่วงวันที่ที่เลือก</td></tr>';
+            return;
+        }
+
+        resultsTableBody.innerHTML = results.map(record => {
+            const isLate = record.timeIn && record.timeIn > LATE_THRESHOLD;
+            const checkInStatusText = record.timeIn ? (isLate ? 'สาย' : 'ปกติ') : '-';
+            const checkInStatusBadge = record.timeIn
+                ? `<span class="status-badge ${isLate ? 'status-late' : 'status-normal'}">${checkInStatusText}</span>`
+                : '-';
+
+            let statusClass = 'status-not-logged-in';
+            if (record.status === 'ออกงานแล้ว') statusClass = 'status-logged-out';
+            else if (record.status === 'ยังไม่ออกงาน') statusClass = 'status-not-logged-out';
+
+            return `
+                <tr>
+                    <td data-label="วันที่">${record.date}</td>
+                    <td data-label="เวลาเข้า">${record.timeIn || '-'}</td>
+                    <td data-label="สถานะเข้างาน">${checkInStatusBadge}</td>
+                    <td data-label="เวลาออก">${record.timeOut || '-'}</td>
+                    <td data-label="ประเภทงาน">${record.locationType || 'ไม่ระบุ'}</td>
+                    <td data-label="สถานที่">${record.location || '-'}</td>
+                    <td data-label="สถานะ"><span class="status-badge ${statusClass}">${record.status}</span></td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function showImageModal(src) {
+        const modal = document.getElementById('imageModal');
+        const modalImg = document.getElementById('modalImage');
+        modal.style.display = 'block';
+        modalImg.src = src;
+    }
+    function closeImageModal() {
+        document.getElementById('imageModal').style.display = 'none';
+    }
+
+    function openIndividualModal() {
+        document.getElementById('individual-modal').classList.add('show');
+    }
+    function closeIndividualModal(event) {
+        if (event) event.stopPropagation();
+        document.getElementById('individual-modal').classList.remove('show');
+    }
+
+    function openEmployeeModal() {
+        document.getElementById('employee-modal').classList.add('show');
+    }
+    function closeEmployeeModal(event) {
+        if (event) event.stopPropagation();
+        document.getElementById('employee-modal').classList.remove('show');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        setInitialDates();
+        populateEmployeeDropdown();
+    });
+    // === ฟังก์ชันเปิด/ปิด Modal รัศมี ===
+function openRadiusModal() {
+    document.getElementById('radius-modal').classList.add('show');
+    loadRadiusConfig();
+}
+
+function closeRadiusModal(event) {
+    if (event) event.stopPropagation();
+    document.getElementById('radius-modal').classList.remove('show');
+}
+
+// === โหลดค่าพิกัดและรัศมีจากชีต 'รัศมี' มาแสดงในฟอร์ม ===
+function loadRadiusConfig() {
+    showLoading('กำลังโหลดข้อมูลรัศมี...');
+    google.script.run
+        .withSuccessHandler(data => {
+            if (typeof Swal !== 'undefined') Swal.close();
+
+            document.getElementById('radiusCoords').value = data.coords || '';
+            document.getElementById('radiusValue').value = data.radius !== '' ? data.radius : '';
+        })
+        .withFailureHandler(error => {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire('เกิดข้อผิดพลาด', `ไม่สามารถโหลดข้อมูลรัศมีได้: ${error.message}`, 'error');
+            } else {
+                alert('ไม่สามารถโหลดข้อมูลรัศมีได้');
+            }
+        })
+        .getLocationConfig();
+}
+
+// === บันทึกค่าพิกัดและรัศมีกลับไปยังชีต ===
+function saveRadiusConfig() {
+    const coords = document.getElementById('radiusCoords').value.trim();
+    const radius = document.getElementById('radiusValue').value.trim();
+
+    if (!coords || !radius) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกพิกัดและรัศมีให้ครบถ้วน', 'warning');
+        } else {
+            alert('กรุณากรอกพิกัดและรัศมีให้ครบถ้วน');
+        }
+        return;
+    }
+
+    showLoading('กำลังบันทึกข้อมูลรัศมี...');
+    google.script.run
+        .withSuccessHandler(res => {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire('สำเร็จ!', res.message, 'success');
+            } else {
+                alert(res.message);
+            }
+        })
+        .withFailureHandler(error => {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
+            } else {
+                alert(error.message);
+            }
+        })
+        .saveLocationConfig(coords, radius);
+}
+
+// === ล้างค่าพิกัดและรัศมี ===
+function clearRadiusConfig() {
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            title: 'ยืนยันการล้างค่า',
+            text: 'ต้องการล้างค่าพิกัดและรัศมีทั้งหมดหรือไม่?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'ใช่, ล้างค่า',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#ef4444'
+        }).then(result => {
+            if (result.isConfirmed) {
+                showLoading('กำลังล้างค่าพิกัดและรัศมี...');
+                google.script.run
+                    .withSuccessHandler(res => {
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire('สำเร็จ!', res.message, 'success');
+                        } else {
+                            alert(res.message);
+                        }
+                        document.getElementById('radiusCoords').value = '';
+                        document.getElementById('radiusValue').value = '';
+                    })
+                    .withFailureHandler(error => {
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
+                        } else {
+                            alert(error.message);
+                        }
+                    })
+                    .clearLocationConfig();
+            }
+        });
+    } else {
+        if (!confirm('ต้องการล้างค่าพิกัดและรัศมีทั้งหมดหรือไม่?')) return;
+        google.script.run.clearLocationConfig();
+        document.getElementById('radiusCoords').value = '';
+        document.getElementById('radiusValue').value = '';
+        alert('ล้างค่าพิกัดและรัศมีเรียบร้อยแล้ว');
+    }
+}
+
+</script>
+</body>
+</html>

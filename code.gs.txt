@@ -1,0 +1,540 @@
+// ==================== CONFIG ====================
+const FOLDER_ID = '11yDe62gdamwc8kIfsxibn7z8BHo9lD8K'; // ‼️ เปลี่ยนเป็น ID โฟลเดอร์ Google Drive ของคุณ
+const SHEET_NAME = 'Data'; // 📝 ชื่อชีตที่ใช้บันทึกข้อมูลเวลา
+const EMPLOYEE_SHEET_NAME = 'รายชื่อพนักงาน'; // 👥 ชื่อชีตที่เก็บรายชื่อพนักงาน
+const LOCATION_SHEET_NAME = 'รัศมี'; // 📍 ชื่อชีตที่เก็บพิกัดและรัศมี
+// ================================================
+
+function doGet() {
+  const template = HtmlService.createTemplateFromFile('index');
+  return template.evaluate()
+    .setTitle("ระบบลงเวลาทำงาน")
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+// ================= Location config (support multiple coords) =================
+// This getOfficeLocationData reads column B rows 1..lastRow and treats the last non-empty
+// cell in column B as the radius (meters). All previous non-empty B cells are treated
+// as coordinates in the format "lat,lng". Column A is read as optional labels for each coord.
+function getOfficeLocationData() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(LOCATION_SHEET_NAME);
+  if (!sheet) {
+    throw new Error(`ไม่พบชีต '${LOCATION_SHEET_NAME}' สำหรับตั้งค่าพิกัด`);
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    throw new Error(`ชีต '${LOCATION_SHEET_NAME}' ต้องมีอย่างน้อย 1 พิกัดและ 1 แถวรัศมี`);
+  }
+
+  // Read column B (coords & radius) for rows 1..lastRow
+  const colB = sheet.getRange(1, 2, lastRow, 1).getValues().flat();
+  // Find last non-empty index in colB (this is treated as radius)
+  let lastNonEmptyIndex = -1;
+  for (let i = colB.length - 1; i >= 0; i--) {
+    const v = colB[i];
+    if (v !== null && v !== undefined && String(v).trim() !== '') {
+      lastNonEmptyIndex = i;
+      break;
+    }
+  }
+  if (lastNonEmptyIndex <= 0) {
+    throw new Error(`ข้อมูลในชีต '${LOCATION_SHEET_NAME}' ยังไม่ครบ (ต้องมีพิกัดใน B1..B<n-1> และรัศมีใน B<n>)`);
+  }
+
+  const radiusVal = colB[lastNonEmptyIndex];
+  const radius = Number(radiusVal);
+  if (isNaN(radius) || radius <= 0) {
+    throw new Error('รัศมีในชีตต้องเป็นตัวเลขมากกว่า 0 (หน่วยเมตร)');
+  }
+
+  // Collect coordinate strings from B1..B(lastNonEmptyIndex-1)
+  const coordStrings = colB.slice(0, lastNonEmptyIndex).map(v => (v === null || v === undefined) ? '' : String(v).trim())
+    .filter(s => s !== '');
+
+  if (coordStrings.length === 0) {
+    throw new Error('ไม่พบพิกัดในชีต (กรุณาใส่พิกัดในรูปแบบ "lat,lng" ที่ B1..B(n-1))');
+  }
+
+  // Read optional labels from column A for same rows
+  const colA = sheet.getRange(1, 1, coordStrings.length, 1).getValues().flat();
+
+  const coords = coordStrings.map((s, idx) => {
+    const parts = s.split(',');
+    if (parts.length < 2) {
+      throw new Error(`พิกัดไม่ถูกต้อง: '${s}' (ต้องเป็นรูปแบบ "lat,lng")`);
+    }
+    const lat = Number(parts[0]);
+    const lon = Number(parts[1]);
+    if (isNaN(lat) || isNaN(lon)) {
+      throw new Error(`พิกัดไม่ใช่ตัวเลขที่ถูกต้อง: '${s}'`);
+    }
+    const name = (colA[idx] && String(colA[idx]).trim() !== '') ? String(colA[idx]).trim() : '';
+    return { name: name, lat: lat, lon: lon };
+  });
+
+  return { coords: coords, radius: radius };
+}
+
+// getLocationConfig returns a simple object for UI consumption:
+// { coords: [{name, lat, lon}, ...], radius: Number }
+function getLocationConfig() {
+  try {
+    const cfg = getOfficeLocationData();
+    return {
+      coords: cfg.coords,
+      radius: cfg.radius
+    };
+  } catch (e) {
+    // If sheet or data missing, return empty structure instead of throwing to UI callers
+    return {
+      coords: [],
+      radius: ''
+    };
+  }
+}
+
+// saveLocationConfig accepts either:
+// - coords: array of strings "lat,lng" OR array of objects {name, coords} OR newline-separated string
+// - radius: number
+// It will write coordinates into column B (and optional names into column A), with the radius in the row after the last coord.
+function saveLocationConfig(coords, radius) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(LOCATION_SHEET_NAME);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(LOCATION_SHEET_NAME);
+  }
+
+  // Normalize coords into array of {name, coordsStr}
+  let coordItems = [];
+
+  if (typeof coords === 'string') {
+    // Split by newline, ignore empty lines
+    coordItems = coords.split(/\r?\n/).map(s => s.trim()).filter(s => s !== '').map(s => ({ name: '', coordsStr: s }));
+  } else if (Array.isArray(coords)) {
+    coordItems = coords.map(item => {
+      if (typeof item === 'string') {
+        return { name: '', coordsStr: item.trim() };
+      } else if (typeof item === 'object' && item !== null) {
+        // Accept either { name, coords } or { coords } shape
+        const coordsStr = item.coords || item.coordsStr || '';
+        const name = item.name || item.label || '';
+        return { name: String(name).trim(), coordsStr: String(coordsStr).trim() };
+      } else {
+        return { name: '', coordsStr: '' };
+      }
+    }).filter(i => i.coordsStr !== '');
+  } else {
+    throw new Error('รูปแบบพิกัดไม่ถูกต้อง (ต้องเป็น string หรือ array)');
+  }
+
+  if (coordItems.length === 0) {
+    throw new Error('กรุณาระบุพิกัดอย่างน้อย 1 จุด');
+  }
+
+  radius = Number(radius);
+  if (isNaN(radius) || radius <= 0) {
+    throw new Error('กรุณากรอกรัศมีเป็นตัวเลขมากกว่า 0 (หน่วยเป็นเมตร)');
+  }
+
+  // Validate each coord
+  coordItems.forEach(ci => {
+    const parts = ci.coordsStr.split(',');
+    if (parts.length < 2) {
+      throw new Error(`พิกัดไม่ถูกต้อง: '${ci.coordsStr}' (ต้องเป็นรูปแบบ "lat,lng")`);
+    }
+    if (isNaN(Number(parts[0])) || isNaN(Number(parts[1]))) {
+      throw new Error(`พิกัดไม่ใช่ตัวเลขที่ถูกต้อง: '${ci.coordsStr}'`);
+    }
+  });
+
+  // Clear the sheet first (to have predictable layout)
+  sheet.clearContents();
+
+  // Write coordinates rows: column A -> name (optional), column B -> coordsStr
+  const rows = coordItems.map(ci => [ci.name || '', ci.coordsStr]);
+  // Append radius row (no name)
+  rows.push(['', radius]);
+
+  sheet.getRange(1, 1, rows.length, 2).setValues(rows);
+
+  return { success: true, message: 'บันทึกพิกัดและรัศมีเรียบร้อยแล้ว' };
+}
+
+function clearLocationConfig() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(LOCATION_SHEET_NAME);
+  if (!sheet) {
+    throw new Error(`ไม่พบชีต '${LOCATION_SHEET_NAME}'`);
+  }
+
+  sheet.clearContents();
+  return { success: true, message: 'ล้างค่าพิกัดและรัศมีเรียบร้อยแล้ว' };
+}
+// ==============================================================================
+
+
+// ✨ คำนวณระยะทางระหว่าง 2 จุดพิกัด (Haversine formula)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // รัศมีโลก หน่วยเป็นเมตร
+  const phi1 = lat1 * Math.PI / 180;
+  const phi2 = lat2 * Math.PI / 180;
+  const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+  const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+            Math.cos(phi1) * Math.cos(phi2) *
+            Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // คืนค่าระยะทางเป็นเมตร
+}
+
+// ✨ ฟังก์ชันหลัก: อัปโหลดรูป + บันทึกเวลา
+function uploadImageAndSave(formData) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sheet) throw new Error(`ไม่พบชีต '${SHEET_NAME}'`);
+
+  const folder = DriveApp.getFolderById(FOLDER_ID);
+  if (!folder) throw new Error("ไม่พบโฟลเดอร์ Google Drive");
+
+  // --- Logic for Clocking In/Out ---
+  if (formData.mode === 'in') {
+    if (formData.locationType && formData.locationType.toString().indexOf('ในหน่วยบริการ') !== -1) {
+      try {
+        const officeConfig = getOfficeLocationData();
+        const userLat = Number(formData.latitude);
+        const userLon = Number(formData.longitude);
+
+        if (isNaN(userLat) || isNaN(userLon)) {
+          return `❌ ไม่สามารถอ่านตำแหน่งของคุณได้ (พิกัดไม่ใช่ตัวเลข)`;
+        }
+
+        // Check distance to any configured coordinate
+        const insideAny = officeConfig.coords.some(c => {
+          const dist = calculateDistance(c.lat, c.lon, userLat, userLon);
+          return dist <= officeConfig.radius;
+        });
+
+        if (!insideAny) {
+          // ถ้าอยู่นอกระยะ ให้ส่งข้อความแจ้งเตือนกลับไปและจบการทำงาน
+          return `❌ คุณอยู่นอกพื้นที่ที่กำหนด ไม่สามารถลงเวลา 'ในหน่วยบริการ' ได้`;
+        }
+      } catch (e) {
+        // กรณีหาชีต 'รัศมี' ไม่เจอ หรือตั้งค่าผิด
+        return `❌ เกิดข้อผิดพลาดในการตรวจสอบพื้นที่: ${e.message}`;
+      }
+    }
+    // 🎯 จบส่วนตรวจสอบรัศมี
+
+    const data = sheet.getDataRange().getValues();
+    const dateStr = Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyy-MM-dd");
+    const name = formData.name.trim();
+    const rowIndex = data.findIndex(row =>
+      String(row[0]).trim() === name &&
+      (row[1] ? Utilities.formatDate(new Date(row[1]), "Asia/Bangkok", "yyyy-MM-dd") : '') === dateStr
+    );
+
+    if (rowIndex !== -1) {
+      return `⚠️ คุณได้ลงเวลาเข้างานไปแล้วในวันนี้`;
+    }
+
+    // --- Image Upload ---
+    try {
+      const base64Data = formData.imageBase64.split(',')[1] || formData.imageBase64;
+      const blobBytes = Utilities.base64Decode(base64Data);
+      const blobFile = Utilities.newBlob(blobBytes, formData.imageType, formData.imageName);
+      const file = folder.createFile(blobFile);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const fileId = file.getId();
+      const lh3Link = `https://lh3.googleusercontent.com/d/${fileId}`;
+
+      // --- Data Preparation & Save ---
+      const now = new Date();
+      const time = Utilities.formatDate(now, "Asia/Bangkok", "HH:mm:ss");
+      
+      const newRow = Array(9).fill(''); 
+      newRow[0] = name;                 // Column A: Name
+      newRow[1] = dateStr;              // Column B: Date
+      newRow[2] = time;                 // Column C: Time In
+      newRow[4] = formData.latitude;    // Column E: Latitude
+      newRow[5] = formData.longitude;   // Column F: Longitude
+      newRow[6] = lh3Link;              // Column G: Image In
+      newRow[8] = formData.locationType || ''; // Column I: Location Type
+      sheet.appendRow(newRow);
+
+      // --- Notify Telegram (เรียกเพิ่มเพื่อส่งแจ้งเตือนทันที) ---
+      try {
+        notifyTelegramOnAttendanceEvent_(name, 'in', time, formData.locationType || '', lh3Link);
+      } catch (err) {
+        // ถ้าส่งไม่สำเร็จ ไม่ให้กระทบกับการบันทึกข้อมูลหลัก
+        Logger.log('Notify Telegram (in) failed: ' + err.message);
+      }
+
+      return `✅ บันทึกเวลาเข้างานสำเร็จ`;
+    } catch (e) {
+      return `❌ เกิดข้อผิดพลาดในการอัปโหลดรูป: ${e.message}`;
+    }
+
+  } else { // formData.mode === 'out'
+    const data = sheet.getDataRange().getValues();
+    const dateStr = Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyy-MM-dd");
+    const name = formData.name.trim();
+    const rowIndex = data.findIndex(row =>
+      String(row[0]).trim() === name &&
+      (row[1] ? Utilities.formatDate(new Date(row[1]), "Asia/Bangkok", "yyyy-MM-dd") : '') === dateStr
+    );
+
+    if (rowIndex === -1) {
+      return `❌ ไม่สามารถลงเวลาออกงานได้ เนื่องจากยังไม่ได้ลงเวลาเข้างานในวันนี้`;
+    }
+
+    const rowNumber = rowIndex + 1;
+    const existingTimeOut = sheet.getRange(rowNumber, 4).getValue();
+    if (existingTimeOut) {
+      return `⚠️ คุณได้ลงเวลาออกงานไปแล้วในวันนี้`;
+    }
+
+    // --- Image Upload ---
+    try {
+      const base64Data = formData.imageBase64.split(',')[1] || formData.imageBase64;
+      const blobBytes = Utilities.base64Decode(base64Data);
+      const blobFile = Utilities.newBlob(blobBytes, formData.imageType, formData.imageName);
+      const file = folder.createFile(blobFile);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const fileId = file.getId();
+      const lh3Link = `https://lh3.googleusercontent.com/d/${fileId}`;
+
+      // --- Data Update ---
+      const time = Utilities.formatDate(new Date(), "Asia/Bangkok", "HH:mm:ss");
+      sheet.getRange(rowNumber, 4).setValue(time);    // Column D: Time Out
+      sheet.getRange(rowNumber, 8).setValue(lh3Link); // Column H: Image Out
+      sheet.getRange(rowNumber, 5).setValue(formData.latitude); // Update location on clock-out
+      sheet.getRange(rowNumber, 6).setValue(formData.longitude);
+
+      // --- Notify Telegram (เรียกเพิ่มเพื่อส่งแจ้งเตือนทันที) ---
+      try {
+        notifyTelegramOnAttendanceEvent_(name, 'out', time, formData.locationType || '', lh3Link);
+      } catch (err) {
+        Logger.log('Notify Telegram (out) failed: ' + err.message);
+      }
+
+      return `✅ บันทึกเวลาออกงานสำเร็จ`;
+    } catch (e) {
+      return `❌ เกิดข้อผิดพลาดในการอัปโหลดรูป: ${e.message}`;
+    }
+  }
+}
+
+// === เมนูใน Google Sheets ===
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('เมนูหลัก')
+    .addItem('📊 แดชบอร์ดสรุป', 'showDashboardPage')
+    .addItem('⏰ หน้าบันทึกเวลา', 'showTimeLogPage')
+    .addToUi();
+}
+
+function showTimeLogPage() {
+  const htmlOutput = HtmlService.createHtmlOutputFromFile('index')
+    .setTitle("ระบบลงเวลาเข้า-ออกงาน")
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  SpreadsheetApp.getUi().showSidebar(htmlOutput);
+}
+
+function showDashboardPage() {
+  const htmlOutput = HtmlService.createHtmlOutputFromFile('dashboard')
+    .setTitle("แดชบอร์ดสรุปเวลาทำงาน")
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  SpreadsheetApp.getUi().showSidebar(htmlOutput);
+}
+
+// === Admin Code ===
+function getAdminCode() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('admin');
+  return sheet ? sheet.getRange("A2").getValue().toString().trim() : '';
+}
+
+// === รายชื่อพนักงาน ===
+function getEmployeeNames() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EMPLOYEE_SHEET_NAME);
+    if (!sheet) return [];
+    
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+    
+    const names = sheet.getRange(2, 1, lastRow - 1, 1).getValues().flat();
+    return names.filter(n => n && n.trim() !== '');
+  } catch (e) {
+    Logger.log(`Error in getEmployeeNames: ${e}`);
+    return [];
+  }
+}
+
+// === สรุปการลงเวลาแบบรายวัน ===
+function getAttendanceSummaryDaily(dateString) {
+  const dataSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const employeeSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EMPLOYEE_SHEET_NAME);
+
+  if (!dataSheet) throw new Error(`ไม่พบชีต '${SHEET_NAME}'`);
+  if (!employeeSheet) throw new Error(`ไม่พบชีต '${EMPLOYEE_SHEET_NAME}'`);
+
+  const allEmployeeNames = getEmployeeNames();
+  const logs = dataSheet.getDataRange().getValues();
+
+  const employeeData = {};
+  allEmployeeNames.forEach(name => {
+    employeeData[name] = {
+      name: name,
+      timeIn: '',
+      timeOut: '',
+      locationType: '', 
+      imageIn: '',
+      imageOut: '',
+      status: 'ไม่ได้ลงเวลา'
+    };
+  });
+
+  for (let i = 1; i < logs.length; i++) {
+    const row = logs[i];
+    const name = String(row[0]).trim();
+    const logDate = row[1] ? Utilities.formatDate(new Date(row[1]), "Asia/Bangkok", "yyyy-MM-dd") : '';
+
+    if (logDate === dateString && employeeData[name]) {
+      employeeData[name].timeIn = row[2] ? Utilities.formatDate(new Date(row[2]), "Asia/Bangkok", "HH:mm") : '';
+      employeeData[name].timeOut = row[3] ? Utilities.formatDate(new Date(row[3]), "Asia/Bangkok", "HH:mm") : '';
+      employeeData[name].imageIn = row[6] || '';
+      employeeData[name].imageOut = row[7] || '';
+      employeeData[name].locationType = row[8] || '';
+    }
+  }
+
+  const summary = {
+    totalEmployees: allEmployeeNames.length,
+    loggedOut: 0,
+    notLoggedOut: 0,
+    missing: 0
+  };
+
+  const details = Object.values(employeeData).map(emp => {
+    if (emp.timeIn && emp.timeOut) {
+      emp.status = 'ออกงานแล้ว';
+      summary.loggedOut++;
+    } else if (emp.timeIn) {
+      emp.status = 'ยังไม่ออกงาน';
+      summary.notLoggedOut++;
+    } else {
+      emp.status = 'ไม่ได้ลงเวลา';
+      summary.missing++;
+    }
+    return emp;
+  });
+
+  return { summary, details };
+}
+
+// === ข้อมูลการลงเวลารายบุคคล ===
+function getIndividualAttendanceData(employeeName, startDate, endDate) {
+  if (!employeeName || !startDate || !endDate) {
+    throw new Error("กรุณาระบุชื่อพนักงานและช่วงวันที่ให้ครบถ้วน");
+  }
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sheet) throw new Error(`ไม่พบชีต '${SHEET_NAME}'`);
+
+  const data = sheet.getDataRange().getValues();
+  const results = [];
+  
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const name = String(row[0]).trim();
+    
+    if (name === employeeName) {
+      if (!row[1]) continue;
+      const logDate = new Date(row[1]);
+
+      if (logDate >= start && logDate <= end) {
+        const timeIn = row[2] ? Utilities.formatDate(new Date(row[2]), "Asia/Bangkok", "HH:mm") : '';
+        const timeOut = row[3] ? Utilities.formatDate(new Date(row[3]), "Asia/Bangkok", "HH:mm") : '';
+        
+        let status = 'ไม่ได้ลงเวลา';
+        if (timeIn && timeOut) {
+          status = 'ออกงานแล้ว';
+        } else if (timeIn) {
+          status = 'ยังไม่ออกงาน';
+        }
+
+        results.push({
+          date: Utilities.formatDate(logDate, "Asia/Bangkok", "d MMM yyyy"),
+          timeIn: timeIn,
+          timeOut: timeOut,
+          locationType: row[8] || '-',
+          status: status
+        });
+      }
+    }
+  }
+
+  results.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return results;
+}
+
+// === เพิ่มพนักงาน ===
+function addEmployee(name) {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EMPLOYEE_SHEET_NAME);
+    if (!sheet) {
+      throw new Error(`ไม่พบชีตที่ชื่อ '${EMPLOYEE_SHEET_NAME}'`);
+    }
+
+    const existingNames = sheet.getRange("A1:A").getValues().flat().filter(String);
+    if (existingNames.includes(name)) {
+      throw new Error(`มีพนักงานชื่อ '${name}' อยู่ในระบบแล้ว`);
+    }
+
+    sheet.appendRow([name]);
+    return { success: true, message: `เพิ่มคุณ ${name} สำเร็จ` };
+
+  } catch (e) {
+    console.error(`Add Employee Error: ${e.message}`);
+    throw new Error(`เกิดข้อผิดพลาดในการเพิ่มพนักงาน: ${e.message}`);
+  }
+}
+
+// === ลบพนักงาน ===
+function deleteEmployee(nameToDelete) {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EMPLOYEE_SHEET_NAME);
+    if (!sheet) {
+      throw new Error(`ไม่พบชีตที่ชื่อ '${EMPLOYEE_SHEET_NAME}'`);
+    }
+    
+    const namesRange = sheet.getRange("A1:A");
+    const names = namesRange.getValues().flat();
+    
+    const rowIndexToDelete = names.findIndex(name => name === nameToDelete);
+
+    if (rowIndexToDelete !== -1) {
+      sheet.deleteRow(rowIndexToDelete + 1);
+      return { success: true, message: `ลบคุณ ${nameToDelete} สำเร็จ` };
+    } else {
+      throw new Error(`ไม่พบพนักงานที่ชื่อ '${nameToDelete}' ในระบบ`);
+    }
+
+  } catch (e) {
+    console.error(`Delete Employee Error: ${e.message}`);
+    throw new Error(`เกิดข้อผิดพลาดในการลบพนักงาน: ${e.message}`);
+  }
+}

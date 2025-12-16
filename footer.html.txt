@@ -1,0 +1,9 @@
+<footer style="position: fixed; bottom: 0; left: 0; right: 0; width: 100%; margin-top: 100%;" class="bg-body-tertiary text-center">
+  <!-- Grid container -->
+  <div class="container-fluid p-4 pb-0">
+    <div class="mb-2">
+  <p class="mb-2">พัฒนาต่อยอดโดย : <strong>Galilexunz</strong></p>
+    <!-- Social Icons -->
+  </div>
+</footer>
+

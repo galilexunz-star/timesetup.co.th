@@ -1,0 +1,327 @@
+const TELEGRAM_TOKEN   = '8123752664:AAERH_1aPOQGgruanOW_jbevyM8zN4i45JI';  // ใส่โทเคนของคุณ
+const TELEGRAM_CHAT_ID = '-5090490925';                                      // ใส่ chatId ของห้อง/กลุ่ม
+const TG_MAX_LEN = 4096; // ข้อจำกัดความยาวข้อความของ Telegram
+
+/** =====================[ CORE ]===================== */
+/** อ่านค่าคอนฟิก Telegram โดยมี fallback มาค่าคงที่ด้านบน */
+function readTelegramConfig_() {
+  const sp = PropertiesService.getScriptProperties();
+  const token = sp.getProperty('TELEGRAM_TOKEN') || TELEGRAM_TOKEN;
+  const chatId = sp.getProperty('TELEGRAM_CHAT_ID') || TELEGRAM_CHAT_ID;
+  if (!token || !chatId) {
+    throw new Error('ยังไม่ได้กำหนด Telegram token/chat id (Script Properties หรือค่าคงที่)');
+  }
+  return { token, chatId };
+}
+
+/** escape สำหรับ parse_mode: 'HTML' */
+function esc_(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** ส่งข้อความไป Telegram (auto split ถ้ายาวเกิน 4096) */
+function tgSendText_(text, parseMode) {
+  const { token, chatId } = readTelegramConfig_();
+  const url = 'https://api.telegram.org/bot' + token + '/sendMessage';
+  const mode = parseMode || 'HTML';
+
+  const chunks = splitTextByLimit_(text, TG_MAX_LEN);
+  chunks.forEach(chunk => {
+    const payload = {
+      chat_id: chatId,
+      text: chunk,
+      parse_mode: mode,
+      disable_web_page_preview: true
+    };
+    const params = { method: 'post', payload, muteHttpExceptions: true };
+    UrlFetchApp.fetch(url, params);
+  });
+}
+
+/** ส่งรูปไป Telegram พร้อม caption */
+function tgSendPhoto_(photoUrl, caption) {
+  const { token, chatId } = readTelegramConfig_();
+  const url = 'https://api.telegram.org/bot' + token + '/sendPhoto';
+  const payload = {
+    chat_id: chatId,
+    photo: photoUrl,
+    caption: caption || '',
+    parse_mode: 'HTML'
+  };
+  const params = { method: 'post', payload, muteHttpExceptions: true };
+  UrlFetchApp.fetch(url, params);
+}
+
+/** แบ่งข้อความยาวเป็นหลายส่วนตามลิมิต */
+function splitTextByLimit_(text, limit) {
+  const out = [];
+  let i = 0;
+  while (i < text.length) {
+    out.push(text.substring(i, i + limit));
+    i += limit;
+  }
+  return out;
+}
+
+/** =====================[ Utilities ]===================== */
+/** แปลงวันที่เป็นรูปแบบไทย: 20 สิงหาคม 2568
+ * รองรับ 'yyyy-MM-dd' หรือ Date object
+ */
+function formatThaiDateLongBE_(dateInput) {
+  let d;
+  if (typeof dateInput === 'string') {
+    const parts = dateInput.split('-'); // คาดหวัง 'yyyy-MM-dd'
+    if (parts.length === 3) {
+      d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    } else {
+      d = new Date(dateInput);
+    }
+  } else {
+    d = new Date(dateInput);
+  }
+
+  const months = [
+    'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+    'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'
+  ];
+  const day   = d.getDate();
+  const month = months[d.getMonth()];
+  const yearBE = d.getFullYear() + 543;
+
+  return `${day} ${month} ${yearBE}`;
+}
+
+/** padding สำหรับตารางใน <pre> ให้คอลัมน์ตรงกัน */
+function pad_(s, n) {
+  s = (s == null ? '' : String(s));
+  if (s.length > n) return s.slice(0, n - 1) + '…';
+  return s + ' '.repeat(n - s.length);
+}
+
+/** คำนวณเปอร์เซ็นต์แบบปัดครึ่งขึ้น (1 จุดทศนิยม) */
+function pct_(part, total) {
+  if (!total) return '0%';
+  return Math.round((part * 1000) / total) / 10 + '%';
+}
+
+/** เส้นคั่น */
+function line_() {
+  return '━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+}
+
+/** =====================[ ตาราง/กลุ่ม ]===================== */
+/** สร้าง “ตาราง” สำหรับกลุ่มที่มีทั้งเวลาเข้า–ออก */
+function buildDoneTable_(rows) {
+  // ชื่อ(20) | เข้า(5) | ออก(5) | สถานที่(20)
+  const header = 'ชื่อ' + ' '.repeat(17) + 'เข้า   ออก   สถานที่';
+  const lines = [header];
+  rows.forEach(e => {
+    const name = pad_(e.name, 20);
+    const tIn  = pad_(e.timeIn || '-', 5);
+    const tOut = pad_(e.timeOut || '-', 5);
+    const loc  = pad_(e.location || '-', 20);
+    lines.push(`${name} ${tIn}  ${tOut}  ${loc}`);
+  });
+  return '<pre>' + lines.join('\n') + '</pre>';
+}
+
+/** สร้าง “ตาราง” สำหรับกลุ่มที่ยังไม่ออก (แสดงชื่อ | เข้า | สถานที่) */
+function buildNotOutTable_(rows) {
+  const header = 'ชื่อ' + ' '.repeat(17) + 'เข้า   สถานที่';
+  const lines = [header];
+  rows.forEach(e => {
+    const name = pad_(e.name, 20);
+    const tIn  = pad_((e.timeIn || '-'), 5);
+    const loc  = pad_(e.location || '-', 20);
+    lines.push(`${name} ${tIn}  ${loc}`);
+  });
+  return '<pre>' + lines.join('\n') + '</pre>';
+}
+
+/** สร้าง “ตาราง” สำหรับกลุ่มที่ไม่ได้ลงเวลา (ชื่ออย่างเดียว) */
+function buildMissingTable_(rows) {
+  const header = 'ชื่อ';
+  const lines = [header];
+  rows.forEach(e => lines.push(`• ${e.name}`));
+  return lines.join('\n');
+}
+
+/** ส่งข้อความแบบ “หัวข้อ + เนื้อหา” (ช่วยให้หลายส่วนอ่านง่าย) */
+function tgSendSection_(title, body) {
+  const msg = `<b>${title}</b>\n${body}`;
+  tgSendText_(msg, 'HTML');
+}
+
+/** =====================[ รายงานประจำวัน (แบบชัดเจน + BE) ]===================== */
+/**
+ * options:
+ *  {
+ *    includeDetails: true (default) — แสดงรายชื่อรายกลุ่ม
+ *    splitByGroup: false (default) — true จะส่งหลายข้อความ: Header 1 ข้อความ + กลุ่มละ 1 ข้อความ
+ *    showDone: true, showNotOut: true, showMissing: true — เปิด/ปิดแต่ละกลุ่ม
+ *  }
+ */
+function buildDailyAttendanceReportClear_(dateString, options) {
+  const opt = Object.assign({
+    includeDetails: true,
+    splitByGroup: false,
+    showDone: true,
+    showNotOut: true,
+    showMissing: true
+  }, options || {});
+
+  if (typeof getAttendanceSummaryDaily !== 'function') {
+    throw new Error('ไม่พบฟังก์ชัน getAttendanceSummaryDaily(dateString) ในโปรเจกต์');
+  }
+
+  const { summary, details } = getAttendanceSummaryDaily(dateString);
+
+  // ✅ ใช้รูปแบบวันที่ "20 สิงหาคม 2568"
+  const thDate = formatThaiDateLongBE_(dateString);
+
+  // จัดกลุ่ม
+  const done = [];
+  const notOut = [];
+  const missing = [];
+  details.forEach(emp => {
+    if (emp.status === 'ออกงานแล้ว') {
+      done.push(emp);
+    } else if (emp.status === 'ยังไม่ออกงาน') {
+      notOut.push(emp);
+    } else {
+      missing.push(emp);
+    }
+  });
+
+  // ส่วนหัว + KPI
+  const header = [
+    `<b>📅 สรุปการลงเวลา — ${esc_(thDate)}</b>`,
+    `👥 จำนวนครูทั้งหมด: <b>${summary.totalEmployees}</b>`,
+    `✅ ออกงานแล้ว: <b>${summary.loggedOut}</b> (${pct_(summary.loggedOut, summary.totalEmployees)})`,
+    `🕒 ยังไม่ออกงาน: <b>${summary.notLoggedOut}</b> (${pct_(summary.notLoggedOut, summary.totalEmployees)})`,
+    `⚠️ ไม่ได้ลงเวลา: <b>${summary.missing}</b> (${pct_(summary.missing, summary.totalEmployees)})`,
+  ].join('\n');
+
+  if (!opt.includeDetails) {
+    // โหมดสรุปล้วน
+    return header;
+  }
+
+  // รายละเอียดในข้อความเดียว (default)
+  if (!opt.splitByGroup) {
+    const parts = [header, ''];
+    if (opt.showDone && done.length) {
+      parts.push(`<b>✅ ออกงานแล้ว (${done.length})</b>`);
+      parts.push(buildDoneTable_(done));
+      parts.push('');
+    }
+    if (opt.showNotOut && notOut.length) {
+      parts.push(`<b>🕒 ยังไม่ออกงาน (${notOut.length})</b>`);
+      parts.push(buildNotOutTable_(notOut));
+      parts.push('');
+    }
+    if (opt.showMissing && missing.length) {
+      parts.push(`<b>⚠️ ไม่ได้ลงเวลา (${missing.length})</b>`);
+      parts.push(buildMissingTable_(missing));
+      parts.push('');
+    }
+    return parts.join('\n');
+  }
+
+  // โหมดแยกกลุ่ม (header หนึ่งข้อความ + กลุ่มละหนึ่งข้อความ)
+  return {
+    header,
+    sections: [
+      opt.showDone && done.length ? { title: `✅ ออกงานแล้ว (${done.length})`, body: buildDoneTable_(done) } : null,
+      opt.showNotOut && notOut.length ? { title: `🕒 ยังไม่ออกงาน (${notOut.length})`, body: buildNotOutTable_(notOut) } : null,
+      opt.showMissing && missing.length ? { title: `⚠️ ไม่ได้ลงเวลา (${missing.length})`, body: buildMissingTable_(missing) } : null
+    ].filter(Boolean)
+  };
+}
+
+/** =====================[ ส่งรายงาน: วันนี้/เมื่อวาน ]===================== */
+
+/** ส่ง “สรุปของวันนี้” (รูปแบบชัดเจน + BE) */
+function sendDailyAttendanceReportToTelegramClear(options) {
+  const today = Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyy-MM-dd");
+  const msg = buildDailyAttendanceReportClear_(today, options);
+  if (typeof msg === 'string') {
+    tgSendText_(msg, 'HTML');
+  } else {
+    tgSendText_(msg.header, 'HTML');
+    msg.sections.forEach(sec => tgSendSection_(sec.title, sec.body));
+  }
+}
+
+/** ส่ง “สรุปของเมื่อวาน” (รูปแบบชัดเจน + BE) */
+function sendYesterdayAttendanceReportToTelegramClear(options) {
+  const now = new Date();
+  const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const dateStr = Utilities.formatDate(y, "Asia/Bangkok", "yyyy-MM-dd");
+  const msg = buildDailyAttendanceReportClear_(dateStr, options);
+  if (typeof msg === 'string') {
+    tgSendText_(msg, 'HTML');
+  } else {
+    tgSendText_(msg.header, 'HTML');
+    msg.sections.forEach(sec => tgSendSection_(sec.title, sec.body));
+  }
+}
+
+/** =====================[ Trigger ส่งอัตโนมัติ ]===================== */
+
+function deleteTriggersByHandler_(handlerFunctionName) {
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(t => {
+    if (t.getHandlerFunction() === handlerFunctionName) {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+}
+
+/** ส่งสรุป “วันนี้” เวลา 17:30 น. ทุกวัน */
+function createDailyReportTrigger_17_30_Clear() {
+  deleteTriggersByHandler_('sendDailyAttendanceReportToTelegramClear');
+  ScriptApp.newTrigger('sendDailyAttendanceReportToTelegramClear')
+    .timeBased()
+    .atHour(17)
+    .nearMinute(30)
+    .everyDays(1)
+    .create();
+}
+
+/** ส่งสรุป “เมื่อวาน” เวลา 08:30 น. ทุกวัน */
+function createMorningYesterdayReportTrigger_08_30_Clear() {
+  deleteTriggersByHandler_('sendYesterdayAttendanceReportToTelegramClear');
+  ScriptApp.newTrigger('sendYesterdayAttendanceReportToTelegramClear')
+    .timeBased()
+    .atHour(8)
+    .nearMinute(30)
+    .everyDays(1)
+    .create();
+}
+
+function notifyTelegramOnAttendanceEvent_(name, mode, timeHHmmss, locationText, photoUrl) {
+  const actionEmoji = (mode === 'in') ? '🟢' : '🔵';
+  const actionText  = (mode === 'in') ? 'เช็กอิน' : 'เช็กเอาต์';
+
+  // ✅ แสดงวันที่เป็น "20 สิงหาคม 2568"
+  const todayTH = formatThaiDateLongBE_(new Date());
+
+  const caption =
+    `<b>${actionEmoji} ${actionText}</b>\n` +
+    `ชื่อ: <b>${esc_(name)}</b>\n` +
+    `เวลา: <b>${esc_(timeHHmmss)}</b>\n` +
+    `วันที่: ${esc_(todayTH)}\n` +
+    (locationText ? `จุดบริการ/สถานที่: ${esc_(locationText)}` : '');
+
+  try {
+    if (photoUrl) {
+      tgSendPhoto_(photoUrl, caption);
+    } else {
+      tgSendText_(caption, 'HTML');
+    }
+  } catch (err) {
+    tgSendText_(caption + '\n(ส่งรูปไม่สำเร็จ)', 'HTML');
+  }
+}
